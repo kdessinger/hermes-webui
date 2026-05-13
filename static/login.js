@@ -169,6 +169,10 @@ document.addEventListener('DOMContentLoaded', function () {
     }
 
     function probe() {
+      // Send same-origin cookies here. Reverse proxies like Cloudflare Access
+      // can gate even the public /health path at the edge, and `credentials: 'omit'`
+      // prevents the browser from attaching the access cookie — yielding a false
+      // 'cannot reach server' warning even though login POSTs work.
       fetch('health', { method: 'GET', credentials: 'same-origin' })
         .then(function (r) {
           if (r.ok) {
@@ -184,9 +188,11 @@ document.addEventListener('DOMContentLoaded', function () {
           }
         })
         .catch(function () {
-          showErr('Cannot reach server — check your VPN / Tailscale connection.');
-          setFormDisabled(true);
-          // Keep retrying so the page auto-recovers once the network is back.
+          showErr('Cannot reach server — check your network path to Hermes Web UI.');
+          // Do not disable the password field here: tunnel/reverse-proxy users can
+          // hit a transient probe failure even though a manual login attempt would
+          // still succeed moments later. Keep retrying in the background so the
+          // page auto-recovers once connectivity stabilizes.
           if (retryTimer === null) {
             retryTimer = setInterval(probe, 3000);
           }
