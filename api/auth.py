@@ -1106,6 +1106,12 @@ def check_auth(handler, parsed) -> bool:
         )
         or parsed.path.startswith('/static/')
         or parsed.path.startswith('/session/static/')
+        # Bundled Agentarium concept art is intentionally a tiny public asset
+        # namespace. It is needed by HTML previews served in a CSP sandbox,
+        # where the WebUI session cookie is unavailable to image subrequests.
+        # The fixed WebUI route itself permits PNGs only; Cloudflare Access
+        # remains the internet-facing access boundary.
+        or parsed.path.startswith('/assets/concept-art/')
     ):
         return True
     cookie_val = parse_cookie(handler)

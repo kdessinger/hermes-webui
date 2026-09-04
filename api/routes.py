@@ -13565,6 +13565,9 @@ def handle_get(handler, parsed) -> bool:
         stripped = parsed._replace(path=parsed.path[len("/session"):])
         return _serve_static(handler, stripped)
 
+    if parsed.path.startswith("/assets/concept-art/"):
+        return _handle_agentarium_concept_art(handler, parsed)
+
     # Firefox Android resolves <link rel="manifest"> against the page URL
     # before the dynamic <base href> script runs when installing from
     # /session/<id>, producing requests like /session/manifest.json.
@@ -17900,6 +17903,42 @@ _COMPRESSIBLE_MIME = {
 # enter the cache; memory cost is bounded by the static/ tree's served files.
 _STATIC_CACHE: dict = {}
 _STATIC_CACHE_LOCK = threading.Lock()
+
+
+_AGENTARIUM_CONCEPT_ART_ROOT = Path(
+    "/root/Kenn/projects/agentarium/assets/concept-art"
+).resolve()
+
+
+def _handle_agentarium_concept_art(handler, parsed):
+    """Serve the intentionally public, PNG-only Agentarium concept-art bundle.
+
+    This is deliberately not a general project-file route.  Authentication is
+    enforced by ``server.py`` before GET dispatch; this handler exposes only
+    files below the fixed concept-art root and rejects traversal and non-PNG
+    requests.
+    """
+    relative_path = unquote(parsed.path[len("/assets/concept-art/"):])
+    if not relative_path:
+        return j(handler, {"error": "not found"}, status=404)
+
+    target = (_AGENTARIUM_CONCEPT_ART_ROOT / relative_path).resolve()
+    try:
+        target.relative_to(_AGENTARIUM_CONCEPT_ART_ROOT)
+    except ValueError:
+        return j(handler, {"error": "not found"}, status=404)
+
+    if target.suffix.lower() != ".png" or not target.is_file():
+        return j(handler, {"error": "not found"}, status=404)
+
+    return _serve_file_bytes(
+        handler,
+        target,
+        "image/png",
+        "inline",
+        "private, no-cache",
+        anchor_root=_AGENTARIUM_CONCEPT_ART_ROOT,
+    )
 
 
 def _serve_static(handler, parsed):
