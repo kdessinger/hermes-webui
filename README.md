@@ -250,6 +250,23 @@ If an AI assistant is helping with install, reinstall, bootstrap, provider setup
 - Appends to existing textarea content (doesn't replace)
 - Hidden when browser doesn't support Web Speech API (Chrome, Edge, Safari)
 
+### Server text-to-speech
+- Settings → Preferences supports browser speech synthesis plus server-side Edge, ElevenLabs, OpenAI-compatible, and Cartesia engines for the Listen button and automatic read-aloud.
+- Cartesia uses the account's `CARTESIA_API_KEY` from the server environment or active Hermes profile `.env`; the key is never sent to the browser.
+- Select **Cartesia (server)** in Settings → Preferences and optionally enter a Cartesia UUID voice ID for that browser. Leaving it empty uses the profile's configured default.
+- Configure the profile default and audio format in `config.yaml` (all values except the key are optional):
+
+  ```yaml
+  tts:
+    cartesia:
+      voice_id: db6b0ed5-d5d3-463d-ae85-518a07d3c2b4
+      model: sonic-latest
+      sample_rate: 44100
+      bit_rate: 128000
+  ```
+
+  Cartesia requests use the Bytes API with MP3 output. Supported sample rates are `8000`, `16000`, `22050`, `24000`, `44100`, and `48000`; supported bit rates are `32000`, `64000`, `96000`, `128000`, and `192000`.
+
 ### Profiles
 - Profile chip in the **composer footer** -- dropdown showing all profiles with gateway status and model info
 - Gateway status dots (green = running), model info, skill count per profile

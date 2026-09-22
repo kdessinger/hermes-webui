@@ -9300,6 +9300,10 @@ function speakMessage(btn){
     _playElevenLabsTts(clean, btn);
     return;
   }
+  if(engine==='cartesia'){
+    _playCartesiaTts(clean, btn);
+    return;
+  }
   if(engine==='edge'){
     _playEdgeTtsChunked(clean, btn);
     return;
@@ -9395,6 +9399,37 @@ function _playOpenaiTts(text, btn){
   .catch(function(e){ _fail((e&&e.message)||'OpenAI TTS failed'); });
 }
 
+function _playCartesiaTts(text, btn){
+  if(btn) btn.dataset.speaking='1';
+  _ttsSpeaking=true;
+  const _fail=function(msg){
+    _ttsSpeaking=false;_playingEdgeAudio=null;
+    if(btn)btn.dataset.speaking='0';
+    if(msg&&typeof showToast==='function') showToast(msg,4000,'error');
+  };
+  fetch(new URL('api/tts', document.baseURI || location.href).href, {
+    method:'POST',
+    headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({
+      text:text,
+      voice:localStorage.getItem('hermes-tts-voice')||'',
+      engine:'cartesia'
+    })
+  })
+  .then(function(r){
+    if(!r.ok){
+      return r.json().catch(function(){return {};}).then(function(j){
+        throw new Error((j&&j.error)||('TTS request failed: '+r.status));
+      });
+    }
+    return r.arrayBuffer();
+  })
+  .then(function(buf){
+    return _playAudioBuf(buf, btn, 'Cartesia TTS');
+  })
+  .catch(function(e){ _fail((e&&e.message)||'Cartesia TTS failed'); });
+}
+
 // ── Shared AudioContext for TTS playback (no blob URLs needed) ──
 let _ttsAudioCtx=null;
 function _getTtsAudioCtx(){
@@ -9480,6 +9515,10 @@ function autoReadLastAssistant(){
   }
   if(engine==='elevenlabs'){
     _playElevenLabsTts(clean, null);
+    return;
+  }
+  if(engine==='cartesia'){
+    _playCartesiaTts(clean, null);
     return;
   }
   if(engine==='edge'){

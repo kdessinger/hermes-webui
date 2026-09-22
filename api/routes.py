@@ -20103,7 +20103,7 @@ def _handle_tts(handler, parsed):
     voice = "zh-CN-XiaoxiaoNeural"
     rate_str = ""
     pitch_str = ""
-    engine = "edge"  # "edge" | "elevenlabs" | "openai" | "browser" (browser is client-side only)
+    engine = "edge"  # "edge" | "elevenlabs" | "openai" | "cartesia" | "browser" (browser is client-side only)
 
     if handler.command != "POST":
         from api.helpers import bad as _bad
@@ -20126,7 +20126,7 @@ def _handle_tts(handler, parsed):
                 persisted_engine = ""
             engine = (
                 persisted_engine
-                if persisted_engine in {"edge", "elevenlabs", "openai"}
+                if persisted_engine in {"edge", "elevenlabs", "openai", "cartesia"}
                 else "edge"
             )
         else:
@@ -20350,6 +20350,116 @@ def _handle_tts(handler, parsed):
             logger.exception("OpenAI TTS generation failed")
             from api.helpers import bad as _bad
             return _bad(handler, "OpenAI TTS generation failed", 500)
+
+        handler.send_response(200)
+        handler.send_header("Content-Type", "audio/mpeg")
+        handler.send_header("Cache-Control", "no-store")
+        handler.send_header("Content-Length", str(len(audio_data)))
+        handler.end_headers()
+        try:
+            handler.wfile.write(audio_data)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        return True
+
+    # ── Cartesia TTS ────────────────────────────────────────────────────
+    if engine == "cartesia":
+        api_key = os.getenv("CARTESIA_API_KEY", "").strip()
+        if not api_key:
+            try:
+                from api.onboarding import _load_env_file
+                from api.profiles import get_active_hermes_home
+
+                api_key = _load_env_file(
+                    get_active_hermes_home() / ".env"
+                ).get("CARTESIA_API_KEY", "")
+            except Exception:
+                pass
+        if not api_key:
+            from api.helpers import bad as _bad
+
+            return _bad(handler, "CARTESIA_API_KEY not configured", 503)
+
+        # Cartesia's public default voice keeps a newly configured key usable
+        # before an operator selects a preferred voice. A UUID supplied by the
+        # WebUI's Cartesia voice field takes precedence for that user/session.
+        voice_id = "db6b0ed5-d5d3-463d-ae85-518a07d3c2b4"
+        model_id = "sonic-latest"
+        sample_rate = 44100
+        bit_rate = 128000
+        try:
+            from api.config import get_config
+
+            tts_cfg = (get_config() or {}).get("tts", {})
+            if isinstance(tts_cfg, dict):
+                cartesia_cfg = tts_cfg.get("cartesia", {})
+                if isinstance(cartesia_cfg, dict):
+                    voice_id = cartesia_cfg.get("voice_id", voice_id) or voice_id
+                    model_id = cartesia_cfg.get("model") or cartesia_cfg.get(
+                        "model_id", model_id
+                    ) or model_id
+                    sample_rate = cartesia_cfg.get("sample_rate", sample_rate)
+                    bit_rate = cartesia_cfg.get("bit_rate", bit_rate)
+        except Exception:
+            pass
+
+        voice_id = str(voice_id).strip()
+        request_voice = str(voice or "").strip()
+        cartesia_voice_id_re = r"[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}"
+        if re.fullmatch(cartesia_voice_id_re, request_voice):
+            voice_id = request_voice
+        if not re.fullmatch(cartesia_voice_id_re, voice_id):
+            from api.helpers import bad as _bad
+
+            return _bad(handler, "invalid Cartesia voice_id in config", 400)
+        if not re.fullmatch(r"[A-Za-z0-9][A-Za-z0-9._-]{0,63}", str(model_id)):
+            from api.helpers import bad as _bad
+
+            return _bad(handler, "invalid Cartesia model in config", 400)
+        if sample_rate not in {8000, 16000, 22050, 24000, 44100, 48000}:
+            from api.helpers import bad as _bad
+
+            return _bad(handler, "invalid Cartesia sample_rate in config", 400)
+        if bit_rate not in {32000, 64000, 96000, 128000, 192000}:
+            from api.helpers import bad as _bad
+
+            return _bad(handler, "invalid Cartesia bit_rate in config", 400)
+
+        req_body = json.dumps({
+            "model_id": model_id,
+            "transcript": text,
+            "voice": {"mode": "id", "id": voice_id},
+            "output_format": {
+                "container": "mp3",
+                "sample_rate": sample_rate,
+                "bit_rate": bit_rate,
+            },
+        }).encode("utf-8")
+        req = Request("https://api.cartesia.ai/tts/bytes", data=req_body, headers={
+            "Authorization": f"Bearer {api_key}",
+            "Cartesia-Version": "2026-03-01",
+            "Content-Type": "application/json",
+            "Accept": "audio/mpeg",
+        })
+        try:
+            with _tts_open(
+                req,
+                timeout=30,
+                opener_factory=lambda: build_opener(
+                    ProxyHandler({}), _NoRedirectTtsHandler(), _PinnedHTTPSHandler()
+                ),
+            ) as resp:
+                audio_data = _buffer_tts_audio_response(resp)
+        except ValueError:
+            logger.warning("Cartesia TTS rejected an invalid upstream response", exc_info=True)
+            from api.helpers import bad as _bad
+
+            return _bad(handler, "Cartesia TTS generation failed", 502)
+        except Exception:
+            logger.exception("Cartesia TTS generation failed")
+            from api.helpers import bad as _bad
+
+            return _bad(handler, "Cartesia TTS generation failed", 500)
 
         handler.send_response(200)
         handler.send_header("Content-Type", "audio/mpeg")

@@ -9650,10 +9650,21 @@ async function loadSettingsPanel(){
       const engine=localStorage.getItem('hermes-tts-engine')||'browser';
       const current=String(_speechSetting('tts_voice','hermes-tts-voice','')||'');
       _syncSpeechPreferenceCache('tts_voice',current);
+      const standardVoiceField=$('settingsTtsVoiceField');
+      const cartesiaVoiceField=$('settingsCartesiaVoiceField');
+      const cartesiaVoiceInput=$('settingsCartesiaVoiceId');
+      if(standardVoiceField) standardVoiceField.hidden=engine==='cartesia';
+      if(cartesiaVoiceField) cartesiaVoiceField.hidden=engine!=='cartesia';
       if(engine==='elevenlabs'){
         ttsVoiceSel.innerHTML='<option value="">Hermy — ElevenLabs (server-configured)</option>';
       } else if(engine==='openai'){
         ttsVoiceSel.innerHTML='<option value="">OpenAI voice (server-configured)</option>';
+      } else if(engine==='cartesia'){
+        ttsVoiceSel.innerHTML='<option value="">Cartesia voice (server-configured)</option>';
+        if(cartesiaVoiceInput){
+          const isCartesiaVoice=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(current);
+          cartesiaVoiceInput.value=isCartesiaVoice?current:'';
+        }
       } else if(engine==='edge'){
         const edgeVoices=[
           {value:'zh-CN-XiaoxiaoNeural',label:'Xiaoxiao (Chinese, Female)'},
@@ -9694,6 +9705,14 @@ async function loadSettingsPanel(){
         if(engine==='browser') window._populateTtsVoices();
       },{once:false});
       ttsVoiceSel.onchange=function(){_markSpeechPreferenceChanged('tts_voice');localStorage.setItem('hermes-tts-voice',this.value);_schedulePreferencesAutosave();};
+    }
+    const cartesiaVoiceInput=$('settingsCartesiaVoiceId');
+    if(cartesiaVoiceInput){
+      cartesiaVoiceInput.onchange=function(){
+        _markSpeechPreferenceChanged('tts_voice');
+        localStorage.setItem('hermes-tts-voice',this.value.trim());
+        _schedulePreferencesAutosave();
+      };
     }
     // TTS rate/pitch sliders
     const ttsRateSlider=$('settingsTtsRate');
