@@ -728,9 +728,13 @@ def test_tts_unrelated_profile_still_rejected(monkeypatch):
 
 def test_boot_js_handles_openai_engine():
     src = (STATIC_DIR / "boot.js").read_text(encoding="utf-8")
-    assert 'if(engine==="openai")' in src
+    assert 'if(engine==="openai"||engine==="openrouter")' in src
     # #7529: the voice-mode openai branch pins the captured profile, so a switch
     # while the shared scheduler holds or retries the request cannot move it to
     # the new profile. (The body used to omit the profile entirely.)
-    assert "body: JSON.stringify({text: clean, engine: 'openai', profile: _ttsProfile})" in src
+    assert "profile: _ttsProfile" in src
     assert "const _ttsProfile=(S&&S.activeProfile)||'default';" in src
+    # Both engines go through the shared scheduler (_sendTtsRequest), and the
+    # openrouter branch merges the selected voice into the request body.
+    assert "window._openRouterTtsSelection()" in src
+    assert "engine:'openrouter'" in src

@@ -2456,7 +2456,7 @@ window.renderTranscript=function(container, messages, opts){
       });
       return;
     }
-    if(engine==="openai"){
+    if(engine==="openai"||engine==="openrouter"){
       const gen=_beginTtsPlayback();
       const _owns=function(){ return _ownsTtsPlayback(gen); };
       // #7529: capture the profile at request-build time. The shared scheduler
@@ -2466,10 +2466,13 @@ window.renderTranscript=function(container, messages, opts){
       const _ttsProfile=(S&&S.activeProfile)||'default';
       // Same shared scheduler as the other engines: this request competes for
       // the per-client slot with every other /api/tts call.
+      const _ttsBody=(engine==='openrouter')
+        ? Object.assign({text:clean, engine:'openrouter'}, window._openRouterTtsSelection())
+        : {text: clean, engine: 'openai', profile: _ttsProfile};
       _sendTtsRequest({
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({text: clean, engine: 'openai', profile: _ttsProfile})
+        body: JSON.stringify(_ttsBody)
       }, _owns)
       .then(res => {
         if(!_owns()) return;
@@ -4052,6 +4055,8 @@ function _mirrorSpeechSettingsFromServer(s){
   [
     ['tts_engine','hermes-tts-engine'],
     ['tts_voice','hermes-tts-voice'],
+    ['tts_openrouter_model','hermes-tts-openrouter-model'],
+    ['tts_openrouter_voice','hermes-tts-openrouter-voice'],
     ['tts_rate','hermes-tts-rate'],
     ['tts_pitch','hermes-tts-pitch'],
     ['voice_silence_ms','hermes-voice-silence-ms'],
