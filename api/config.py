@@ -11386,6 +11386,8 @@ _SETTINGS_DEFAULTS = {
     "tts_auto_read": False,
     "tts_engine": "browser",
     "tts_voice": "",
+    "tts_openrouter_model": "heygen/heygen-voice-1-turbo",
+    "tts_openrouter_voice": "",
     "tts_rate": 1.0,
     "tts_pitch": 1.0,
     "voice_mode_button": False,
@@ -11456,6 +11458,8 @@ _SETTINGS_SPEECH_KEYS = {
     "tts_auto_read",
     "tts_engine",
     "tts_voice",
+    "tts_openrouter_model",
+    "tts_openrouter_voice",
     "tts_rate",
     "tts_pitch",
     "voice_mode_button",
@@ -11930,7 +11934,11 @@ def save_settings(settings: dict) -> dict:
                 v = v.strip()
                 if not _SETTINGS_TTS_ENGINE_RE.match(v):
                     continue
-            if k == "tts_voice":
+            if k == "tts_openrouter_model":
+                from api.openrouter_tts import MODEL_RE
+                if not isinstance(v, str) or not MODEL_RE.fullmatch(v):
+                    continue
+            if k == "tts_voice" or k == "tts_openrouter_voice":
                 if not isinstance(v, str) or len(v) > 200 or "\x00" in v:
                     continue
             # Validate language codes (BCP-47-like: 'en', 'zh', 'fr', 'zh-CN')

@@ -9300,6 +9300,10 @@ function speakMessage(btn){
     _playElevenLabsTts(clean, btn);
     return;
   }
+  if(engine==='openrouter'){
+    _playOpenRouterTts(clean, btn);
+    return;
+  }
   if(engine==='cartesia'){
     _playCartesiaTts(clean, btn);
     return;
@@ -9397,6 +9401,27 @@ function _playOpenaiTts(text, btn){
     return _playAudioBuf(buf, btn, 'OpenAI TTS');
   })
   .catch(function(e){ _fail((e&&e.message)||'OpenAI TTS failed'); });
+}
+
+function _playOpenRouterTts(text, btn){
+  if(btn) btn.dataset.speaking='1';
+  _ttsSpeaking=true;
+  const selection=window._openRouterTtsSelection();
+  return fetch(new URL('api/tts', document.baseURI || location.href).href,{
+    method:'POST',headers:{'Content-Type':'application/json'},
+    body:JSON.stringify({text:text,model:selection.model,voice:selection.voice,engine:'openrouter'})
+  }).then(function(r){
+    if(!r.ok) return r.json().catch(function(){return {};}).then(function(j){
+      throw new Error(j.error||('HTTP '+r.status));
+    });
+    return r.arrayBuffer();
+  }).then(function(buf){
+    return _playAudioBuf(buf, btn, 'OpenRouter TTS');
+  }).catch(function(e){
+    _ttsSpeaking=false;_playingEdgeAudio=null;
+    if(btn)btn.dataset.speaking='0';
+    if(typeof showToast==='function') showToast((e&&e.message)||'OpenRouter TTS failed',4000,'error');
+  });
 }
 
 function _playCartesiaTts(text, btn){
@@ -9515,6 +9540,10 @@ function autoReadLastAssistant(){
   }
   if(engine==='elevenlabs'){
     _playElevenLabsTts(clean, null);
+    return;
+  }
+  if(engine==='openrouter'){
+    _playOpenRouterTts(clean, null);
     return;
   }
   if(engine==='cartesia'){

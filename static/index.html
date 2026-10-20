@@ -1252,11 +1252,31 @@
               <div style="font-size:11px;color:var(--muted);margin-top:4px" data-i18n="dictation_append_desc">When ON, dictated text is appended to any text already in the composer (with a space if needed). When OFF, dictated text replaces the composer content.</div>
             </div>
             <div class="settings-field">
-              <label for="settingsTtsEngine" data-i18n="settings_label_tts_engine">TTS Engine</label><select id="settingsTtsEngine" style="width:100%;padding:8px;background:var(--code-bg);color:var(--text);border:1px solid var(--border2);border-radius:6px"><option value="browser">Browser speech synthesis</option><option value="edge">Edge TTS (server)</option><option value="elevenlabs">ElevenLabs (server)</option><option value="openai">OpenAI TTS (server)</option></select><div style="font-size:11px;color:var(--muted);margin-top:4px" data-i18n="settings_desc_tts_engine">Choose speech engine. Edge TTS uses Microsoft neural voices via the server.</div></div><div class="settings-field"><label for="settingsTtsVoice" data-i18n="settings_label_tts_voice">Voice</label>
+              <label for="settingsTtsEngine" data-i18n="settings_label_tts_engine">TTS Engine</label><select id="settingsTtsEngine" style="width:100%;padding:8px;background:var(--code-bg);color:var(--text);border:1px solid var(--border2);border-radius:6px"><option value="browser">Browser speech synthesis</option><option value="edge">Edge TTS (server)</option><option value="elevenlabs">ElevenLabs (server)</option><option value="openai">OpenAI TTS (server)</option><option value="cartesia">Cartesia (server)</option><option value="openrouter">OpenRouter (server)</option></select><div style="font-size:11px;color:var(--muted);margin-top:4px" data-i18n="settings_desc_tts_engine">Choose speech engine. Edge TTS uses Microsoft neural voices via the server.</div></div><div class="settings-field" id="settingsTtsVoiceField"><label for="settingsTtsVoice" data-i18n="settings_label_tts_voice">Voice</label>
               <select id="settingsTtsVoice" style="width:100%;padding:8px;background:var(--code-bg);color:var(--text);border:1px solid var(--border2);border-radius:6px">
                 <option value="">Default system voice</option>
               </select>
               <div style="font-size:11px;color:var(--muted);margin-top:4px" data-i18n="settings_desc_tts_voice">Preferred voice. Populated from your browser's available voices.</div>
+            </div>
+            <div class="settings-field" id="settingsOpenRouterField" hidden>
+              <label for="settingsOpenRouterModel">OpenRouter speech model</label>
+              <select id="settingsOpenRouterModel" style="width:100%;min-width:0;padding:8px;background:var(--code-bg);color:var(--text);border:1px solid var(--border2);border-radius:6px"></select>
+              <button type="button" class="btn primary" id="settingsOpenRouterRefresh" style="margin-top:8px">Refresh speech catalog</button>
+              <div id="settingsOpenRouterStatus" role="status" style="font-size:11px;color:var(--muted);margin-top:4px"></div>
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-top:12px">
+                <label for="settingsOpenRouterVoice">Model voice</label>
+                <button type="button" class="btn primary" id="settingsOpenRouterPreview" aria-label="Preview selected voice" title="Play a short voice sample" style="min-height:36px;padding:6px 10px;white-space:nowrap">▶ Preview</button>
+              </div>
+              <div id="settingsOpenRouterPreviewStatus" role="status" aria-live="polite" style="font-size:11px;color:var(--muted);margin:4px 0">Preview generates a short sample using OpenRouter credits.</div>
+              <select id="settingsOpenRouterVoice" style="width:100%;min-width:0;padding:8px;background:var(--code-bg);color:var(--text);border:1px solid var(--border2);border-radius:6px"></select>
+              <label for="settingsOpenRouterCustomVoice" id="settingsOpenRouterCustomLabel" hidden>Provider voice ID (optional)</label>
+              <input id="settingsOpenRouterCustomVoice" hidden type="text" maxlength="200" autocomplete="off" spellcheck="false" style="width:100%;min-width:0" placeholder="Leave empty for the provider default">
+              <div style="font-size:11px;color:var(--muted);margin-top:6px">Catalog listing does not guarantee provider availability. Uses OpenRouter credits; free routes may be rate-limited. No automatic paid fallback.</div>
+            </div>
+            <div class="settings-field" id="settingsCartesiaVoiceField" hidden>
+              <label for="settingsCartesiaVoiceId">Cartesia voice ID</label>
+              <input id="settingsCartesiaVoiceId" type="text" maxlength="36" inputmode="text" autocomplete="off" spellcheck="false" placeholder="xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx" pattern="[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}" style="width:100%;padding:8px;background:var(--code-bg);color:var(--text);border:1px solid var(--border2);border-radius:6px;font-family:var(--mono,monospace)">
+              <div style="font-size:11px;color:var(--muted);margin-top:4px">Optional per-browser override. Leave empty to use <code>tts.cartesia.voice_id</code> from the server configuration.</div>
             </div>
             <div class="settings-field">
               <label for="settingsTtsRate" data-i18n="settings_label_tts_rate">Speech rate</label>
@@ -1779,6 +1799,7 @@
 <script src="static/commands.js?v=__WEBUI_VERSION__" defer></script>
 <script src="static/messages.js?v=__WEBUI_VERSION__" defer></script>
 <script src="static/extension_settings.js?v=__WEBUI_VERSION__" defer></script>
+<script src="static/openrouter-tts.js?v=__WEBUI_VERSION__-preview-2" defer></script>
 <script src="static/panels.js?v=__WEBUI_VERSION__" defer></script>
 <script src="static/onboarding.js?v=__WEBUI_VERSION__" defer></script>
 <script src="static/boot.js?v=__WEBUI_VERSION__" defer></script>

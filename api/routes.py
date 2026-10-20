@@ -14007,6 +14007,13 @@ def handle_get(handler, parsed) -> bool:
             days = 7
         return j(handler, get_provider_cost_history(provider_id, days))
 
+    if parsed.path == "/api/tts/openrouter/models":
+        from api.openrouter_tts import get_catalog
+        import api.auth as tts_auth
+        if tts_auth.is_auth_enabled() and not tts_auth.verify_session(tts_auth.parse_cookie(handler) or ""):
+            return bad(handler, "unauthorized", status=401)
+        return j(handler, get_catalog(refresh=parse_qs(parsed.query).get("refresh") == ["1"]))
+
     if parsed.path == "/api/settings":
         settings = load_settings()
         settings["persisted_speech_keys"] = persisted_speech_settings_keys()
@@ -20126,7 +20133,7 @@ def _handle_tts(handler, parsed):
                 persisted_engine = ""
             engine = (
                 persisted_engine
-                if persisted_engine in {"edge", "elevenlabs", "openai", "cartesia"}
+                if persisted_engine in {"edge", "elevenlabs", "openai", "cartesia", "openrouter"}
                 else "edge"
             )
         else:
@@ -20350,6 +20357,64 @@ def _handle_tts(handler, parsed):
             logger.exception("OpenAI TTS generation failed")
             from api.helpers import bad as _bad
             return _bad(handler, "OpenAI TTS generation failed", 500)
+
+        handler.send_response(200)
+        handler.send_header("Content-Type", "audio/mpeg")
+        handler.send_header("Cache-Control", "no-store")
+        handler.send_header("Content-Length", str(len(audio_data)))
+        handler.end_headers()
+        try:
+            handler.wfile.write(audio_data)
+        except (BrokenPipeError, ConnectionResetError):
+            pass
+        return True
+
+    # ── OpenRouter TTS (HeyGen Voice Turbo) ─────────────────────────────
+    if engine == "openrouter":
+        from api.helpers import bad as _bad
+
+        api_key = os.getenv("OPENROUTER_API_KEY", "").strip()
+        if not api_key:
+            try:
+                from api.onboarding import _load_env_file
+                from api.profiles import get_active_hermes_home
+                api_key = _load_env_file(
+                    get_active_hermes_home() / ".env"
+                ).get("OPENROUTER_API_KEY", "").strip()
+            except Exception:
+                pass
+        if not api_key:
+            return _bad(handler, "OPENROUTER_API_KEY not configured", 503)
+
+        from api.openrouter_tts import DEFAULT_MODEL, speech_payload
+        settings = load_settings() or {}
+        model_id = data.get("model", settings.get("tts_openrouter_model", DEFAULT_MODEL))
+        # An explicit model with omitted voice uses that provider's default,
+        # never a stale voice persisted for a different model.
+        selected_voice = data.get("voice", "" if "model" in data else settings.get("tts_openrouter_voice", ""))
+        try:
+            payload = speech_payload(text, model_id, selected_voice)
+        except ValueError as exc:
+            return _bad(handler, str(exc), 400)
+        req = Request("https://openrouter.ai/api/v1/audio/speech", data=json.dumps(payload).encode("utf-8"), headers={
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json",
+            "Accept": "audio/mpeg",
+        })
+        try:
+            with _tts_open(
+                req, timeout=30,
+                opener_factory=lambda: build_opener(
+                    ProxyHandler({}), _NoRedirectTtsHandler(), _PinnedHTTPSHandler()
+                ),
+            ) as resp:
+                audio_data = _buffer_tts_audio_response(resp)
+                if not audio_data:
+                    raise ValueError("upstream returned empty audio")
+        except Exception as exc:
+            # Do not return upstream bodies or log spoken text/credentials.
+            logger.warning("OpenRouter TTS failed (%s)", type(exc).__name__)
+            return _bad(handler, "OpenRouter TTS generation failed; check API access and credits", 502)
 
         handler.send_response(200)
         handler.send_header("Content-Type", "audio/mpeg")

@@ -8706,6 +8706,8 @@ const _SETTINGS_SPEECH_STORAGE_KEYS={
   tts_auto_read:'hermes-tts-auto-read',
   tts_engine:'hermes-tts-engine',
   tts_voice:'hermes-tts-voice',
+  tts_openrouter_model:'hermes-tts-openrouter-model',
+  tts_openrouter_voice:'hermes-tts-openrouter-voice',
   tts_rate:'hermes-tts-rate',
   tts_pitch:'hermes-tts-pitch',
   voice_mode_button:'hermes-voice-mode-button',
@@ -8839,6 +8841,9 @@ function _speechPreferencesPayloadFromUi(){
   if(ttsEngineSel) _setOwnedSpeechPayload(payload,'tts_engine',ttsEngineSel.value||'browser');
   const ttsVoiceSel=$('settingsTtsVoice');
   if(ttsVoiceSel) _setOwnedSpeechPayload(payload,'tts_voice',ttsVoiceSel.value||'');
+  ['tts_openrouter_model','tts_openrouter_voice'].forEach(function(key){
+    _setOwnedSpeechPayload(payload,key,localStorage.getItem(_SETTINGS_SPEECH_STORAGE_KEYS[key])||(key==='tts_openrouter_model'?'heygen/heygen-voice-1-turbo':''));
+  });
   const ttsRateSlider=$('settingsTtsRate');
   if(ttsRateSlider) _setOwnedSpeechPayload(payload,'tts_rate',parseFloat(ttsRateSlider.value));
   const ttsPitchSlider=$('settingsTtsPitch');
@@ -9653,12 +9658,21 @@ async function loadSettingsPanel(){
       const standardVoiceField=$('settingsTtsVoiceField');
       const cartesiaVoiceField=$('settingsCartesiaVoiceField');
       const cartesiaVoiceInput=$('settingsCartesiaVoiceId');
-      if(standardVoiceField) standardVoiceField.hidden=engine==='cartesia';
+      if(typeof window._setupOpenRouterTts==='function') window._setupOpenRouterTts();
+      if(standardVoiceField) standardVoiceField.hidden=engine==='cartesia'||engine==='openrouter';
       if(cartesiaVoiceField) cartesiaVoiceField.hidden=engine!=='cartesia';
       if(engine==='elevenlabs'){
         ttsVoiceSel.innerHTML='<option value="">Hermy — ElevenLabs (server-configured)</option>';
       } else if(engine==='openai'){
         ttsVoiceSel.innerHTML='<option value="">OpenAI voice (server-configured)</option>';
+      } else if(engine==='openrouter'){
+        ttsVoiceSel.innerHTML='<option value="">HeyGen Voice Turbo — default (Nadine)</option>';
+        ['nadine','tabitha','bram','gareth','noelle','meredith','sabrina','lucian','weston','vincent'].forEach(function(voice){
+          const opt=document.createElement('option');
+          opt.value=voice;opt.textContent=voice.charAt(0).toUpperCase()+voice.slice(1);
+          opt.selected=voice===current;
+          ttsVoiceSel.appendChild(opt);
+        });
       } else if(engine==='cartesia'){
         ttsVoiceSel.innerHTML='<option value="">Cartesia voice (server-configured)</option>';
         if(cartesiaVoiceInput){

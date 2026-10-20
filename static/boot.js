@@ -1850,12 +1850,12 @@ window.renderTranscript=function(container, messages, opts){
       });
       return;
     }
-    if(engine==="openai"){
+    if(engine==="openai"||engine==="openrouter"){
       _ttsSpeaking=true;
       fetch(new URL('api/tts', document.baseURI || location.href).href, {
         method: 'POST',
         headers: {'Content-Type': 'application/json'},
-        body: JSON.stringify({text: clean, engine: 'openai'})
+        body: JSON.stringify(engine==='openrouter'?Object.assign({text:clean,engine:'openrouter'},window._openRouterTtsSelection()):{text: clean, engine: 'openai'})
       })
       .then(r => {
         if(!r.ok) throw new Error('TTS request failed: ' + r.status);
@@ -3256,6 +3256,8 @@ function _mirrorSpeechSettingsFromServer(s){
   [
     ['tts_engine','hermes-tts-engine'],
     ['tts_voice','hermes-tts-voice'],
+    ['tts_openrouter_model','hermes-tts-openrouter-model'],
+    ['tts_openrouter_voice','hermes-tts-openrouter-voice'],
     ['tts_rate','hermes-tts-rate'],
     ['tts_pitch','hermes-tts-pitch'],
     ['voice_silence_ms','hermes-voice-silence-ms'],
