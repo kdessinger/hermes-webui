@@ -35,7 +35,7 @@ def test_missing_key(monkeypatch):
 
 
 @pytest.mark.parametrize('voice', ['', 'bram', 'nadine', 'vincent'])
-def test_request_returns_mp3(monkeypatch, voice):
+def test_request_returns_wav(monkeypatch, voice):
     monkeypatch.setenv('OPENROUTER_API_KEY', 'test-only-key')
     def upstream(req, *, timeout, opener_factory):
         assert req.full_url == 'https://openrouter.ai/api/v1/audio/speech'
@@ -43,23 +43,27 @@ def test_request_returns_mp3(monkeypatch, voice):
         assert timeout == 30
         assert json.loads(req.data) == {
             'model': 'heygen/heygen-voice-1-turbo', 'input': 'Hello',
-            'voice': voice or 'nadine', 'response_format': 'mp3',
+            'voice': voice or 'nadine', 'response_format': 'pcm',
         }
-        return _AudioResponse(b'ID3openrouter')
+        response = _AudioResponse(b'\x01\x00' * 100)
+        response.headers = {'Content-Type': 'audio/pcm;rate=44100;channels=1'}
+        return response
     monkeypatch.setattr(routes, '_tts_open', upstream)
     h = _FakeHandler({'text': 'Hello', 'engine': 'openrouter', 'voice': voice})
     routes._handle_tts(h, None)
     assert h.status == 200
-    assert h.sent_headers['Content-Type'] == 'audio/mpeg'
+    assert h.sent_headers['Content-Type'] == 'audio/wav'
     assert h.sent_headers['Cache-Control'] == 'no-store'
-    assert h.wfile.getvalue() == b'ID3openrouter'
+    assert h.wfile.getvalue().startswith(b'RIFF')
 
 
 def test_profile_key_and_persisted_engine(monkeypatch):
     import api.onboarding as onboarding
     monkeypatch.setattr(onboarding, '_load_env_file', lambda *_a: {'OPENROUTER_API_KEY': 'profile-key'})
     monkeypatch.setattr(routes, 'load_settings', lambda: {'tts_engine': 'openrouter'})
-    monkeypatch.setattr(routes, '_tts_open', lambda *a, **kw: _AudioResponse())
+    response = _AudioResponse(b'\x01\x00' * 100)
+    response.headers = {'Content-Type': 'audio/pcm;rate=44100;channels=1'}
+    monkeypatch.setattr(routes, '_tts_open', lambda *a, **kw: response)
     h = _FakeHandler({'text': 'Hello'})
     routes._handle_tts(h, None)
     assert h.status == 200
