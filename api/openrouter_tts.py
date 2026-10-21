@@ -86,7 +86,7 @@ def speech_payload(text, model, voice):
         raise ValueError('voice is not supported by the selected OpenRouter model')
     # OpenRouter's generated model docs list MP3 for Gemini, but the live
     # provider rejects it. Request PCM directly, without a second billed retry.
-    pcm = model.startswith('google/gemini-') and 'tts' in model
+    pcm = (model.startswith('google/gemini-') and 'tts' in model) or model.startswith('heygen/')
     result = {'model': model, 'input': text, 'response_format': 'pcm' if pcm else 'mp3'}
     # Preserve the original HeyGen default; other providers choose their own.
     if not voice and model.startswith('heygen/'):

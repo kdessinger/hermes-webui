@@ -8,6 +8,17 @@ import api.routes as routes
 from tests.test_cartesia_tts import _FakeHandler, _AudioResponse
 
 
+@pytest.mark.parametrize('model', ['heygen/heygen-voice-1', 'heygen/heygen-voice-1-turbo'])
+def test_heygen_requests_pcm_and_preserves_44100_rate(monkeypatch, model):
+    monkeypatch.setattr(tts, 'get_catalog', lambda: {'models': [{'id': model, 'voices': ['sabrina']}]})
+    assert tts.speech_payload('Hello', model, 'sabrina')['response_format'] == 'pcm'
+    audio, mime = tts.playable_audio(b'\x01\x00' * 441, 'audio/pcm;rate=44100;channels=1', pcm=True)
+    assert mime == 'audio/wav'
+    with wave.open(io.BytesIO(audio)) as wav:
+        assert wav.getframerate() == 44100
+        assert wav.getnframes() == 441
+
+
 def test_gemini_requests_pcm(monkeypatch):
     monkeypatch.setattr(tts, 'get_catalog', lambda: {'models': [{'id':'google/gemini-3.8-flash-lite-tts','voices':['Sadachbia']}]})
     assert tts.speech_payload('Hello','google/gemini-3.8-flash-lite-tts','Sadachbia')['response_format']=='pcm'
