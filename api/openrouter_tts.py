@@ -84,10 +84,51 @@ def speech_payload(text, model, voice):
         raise ValueError('invalid OpenRouter voice')
     if voice and metadata['voices'] and voice not in metadata['voices']:
         raise ValueError('voice is not supported by the selected OpenRouter model')
-    result = {'model': model, 'input': text, 'response_format': 'mp3'}
+    # OpenRouter's generated model docs list MP3 for Gemini, but the live
+    # provider rejects it. Request PCM directly, without a second billed retry.
+    pcm = model.startswith('google/gemini-') and 'tts' in model
+    result = {'model': model, 'input': text, 'response_format': 'pcm' if pcm else 'mp3'}
     # Preserve the original HeyGen default; other providers choose their own.
     if not voice and model.startswith('heygen/'):
         voice = 'nadine'
     if voice:
         result['voice'] = voice
     return result
+
+
+def playable_audio(audio, content_type, *, pcm=False):
+    """Wrap Gemini's signed 16-bit LE PCM in WAV; keep MP3 paths unchanged."""
+    if not audio:
+        raise ValueError('empty speech audio')
+    if not pcm:
+        return audio, 'audio/mpeg'
+    from email.message import Message
+    import io
+    import wave
+    header = Message()
+    header['content-type'] = content_type
+    if header.get_content_type() not in {'audio/pcm', 'audio/l16', 'audio/x-pcm'}:
+        raise ValueError('expected PCM audio')
+    try:
+        rate = int(header.get_param('rate') or 24000)
+        channels = int(header.get_param('channels') or 1)
+    except (TypeError, ValueError):
+        raise ValueError('invalid PCM format') from None
+    if rate not in {8000, 16000, 22050, 24000, 44100, 48000} or channels not in {1, 2}:
+        raise ValueError('unsupported PCM format')
+    if len(audio) % (2 * channels):
+        raise ValueError('incomplete PCM frame')
+    # L16 is network-byte-order PCM; convert to WAV's little-endian samples.
+    if header.get_content_type() == 'audio/l16':
+        import array
+        samples = array.array('h')
+        samples.frombytes(audio)
+        samples.byteswap()
+        audio = samples.tobytes()
+    buffer = io.BytesIO()
+    with wave.open(buffer, 'wb') as output:
+        output.setnchannels(channels)
+        output.setsampwidth(2)
+        output.setframerate(rate)
+        output.writeframes(audio)
+    return buffer.getvalue(), 'audio/wav'

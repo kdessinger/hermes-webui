@@ -36,8 +36,10 @@ OpenRouter specifically requires BYOK for the requested capability.
 
 ## Synthesis and boundaries
 
-The server sends the exact selected model to `/api/v1/audio/speech`, requesting
-MP3. Current catalog models document MP3 support. The provider chooses its default
+The server sends the exact selected model to `/api/v1/audio/speech`. Most models
+use MP3. Gemini TTS requires PCM despite OpenRouter model docs advertising MP3;
+Gemini PCM is wrapped server-side as WAV using its sample-rate/channel metadata
+(24 kHz mono by default). No extra generation retry is needed. The provider chooses its default
 voice when none is supplied (HeyGen retains its original Nadine default).
 Unknown models and invalid listed voices are rejected before synthesis; refresh
 the catalog when a new model is released. Custom voice IDs are allowed only for
