@@ -20386,7 +20386,7 @@ def _handle_tts(handler, parsed):
         if not api_key:
             return _bad(handler, "OPENROUTER_API_KEY not configured", 503)
 
-        from api.openrouter_tts import DEFAULT_MODEL, speech_payload
+        from api.openrouter_tts import DEFAULT_MODEL, speech_payload, playable_audio
         settings = load_settings() or {}
         model_id = data.get("model", settings.get("tts_openrouter_model", DEFAULT_MODEL))
         # An explicit model with omitted voice uses that provider's default,
@@ -20399,7 +20399,7 @@ def _handle_tts(handler, parsed):
         req = Request("https://openrouter.ai/api/v1/audio/speech", data=json.dumps(payload).encode("utf-8"), headers={
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json",
-            "Accept": "audio/mpeg",
+            "Accept": "audio/pcm" if payload["response_format"] == "pcm" else "audio/mpeg",
         })
         try:
             with _tts_open(
@@ -20409,15 +20409,17 @@ def _handle_tts(handler, parsed):
                 ),
             ) as resp:
                 audio_data = _buffer_tts_audio_response(resp)
-                if not audio_data:
-                    raise ValueError("upstream returned empty audio")
+                audio_data, audio_type = playable_audio(
+                    audio_data, str(resp.headers.get("Content-Type") or ""),
+                    pcm=payload["response_format"] == "pcm",
+                )
         except Exception as exc:
             # Do not return upstream bodies or log spoken text/credentials.
             logger.warning("OpenRouter TTS failed (%s)", type(exc).__name__)
             return _bad(handler, "OpenRouter TTS generation failed; check API access and credits", 502)
 
         handler.send_response(200)
-        handler.send_header("Content-Type", "audio/mpeg")
+        handler.send_header("Content-Type", audio_type)
         handler.send_header("Cache-Control", "no-store")
         handler.send_header("Content-Length", str(len(audio_data)))
         handler.end_headers()
