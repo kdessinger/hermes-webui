@@ -377,6 +377,8 @@ class Handler(BaseHTTPRequestHandler):
         try:
             parsed = urlparse(self.path)
             if not check_auth(self, parsed): return
+            from api.external_apps import handle_external_apps
+            if handle_external_apps(self, parsed): return
             result = handle_get(self, parsed)
             if result is False:
                 return j(self, {'error': 'not found'}, status=404)
@@ -405,6 +407,12 @@ class Handler(BaseHTTPRequestHandler):
                 parsed.path == "/api/csp-report" and self.command == "POST"
             )
             if not _is_csp_report_post and not check_auth(self, parsed): return
+            if parsed.path == '/api/external-apps':
+                from api.routes import _check_csrf
+                if not _check_csrf(self):
+                    return j(self, {'error': 'CSRF validation failed'}, status=403)
+            from api.external_apps import handle_external_apps
+            if handle_external_apps(self, parsed): return
             result = route_func(self, parsed)
             if result is False:
                 return j(self, {'error': 'not found'}, status=404)
