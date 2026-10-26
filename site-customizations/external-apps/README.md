@@ -13,6 +13,11 @@ settings contract.
   slot with `{id,url,label}`. Both run after authentication; writes use the core
   CSRF/origin gate, bounded JSON, validation, a process lock and atomic mode-0600
   replacement. Configured URLs are iframe destinations, never server proxy targets.
+- Custom Configure handlers pass the runtime context into the editor and invoke
+  `restoreFocus()` exactly once on Save, Cancel, backdrop dismissal, Escape or
+  replacement. Otherwise Settings retains its disabled `Opening…` state forever.
+  Editors use z-index 1150 above the core dialog layer (1100), and focus the label
+  input so Escape is received. Both slots have real-runtime lifecycle regressions.
 - A successful dialog save means the server acknowledged persistence. Errors
   retain the dialog and prior config. No localStorage migration can overwrite
   shared state. Clearing browser data cannot delete server configuration.
