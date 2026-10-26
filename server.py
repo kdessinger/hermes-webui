@@ -390,6 +390,8 @@ class Handler(BaseHTTPRequestHandler):
             parsed = fold_api_path(self, urlparse(self.path))  # case-insensitive /api/ routing (#3943)
             # Body-pending-aware: a body-bearing GET failing auth would poison reuse (#7550).
             if not check_auth_or_close(self, parsed): return
+            from api.external_apps import handle_external_apps
+            if handle_external_apps(self, parsed): return
             result = handle_get(self, parsed)
             if result is False:
                 return j(self, {'error': 'not found'}, status=404)
@@ -418,6 +420,12 @@ class Handler(BaseHTTPRequestHandler):
             parsed = fold_api_path(self, urlparse(self.path))  # case-insensitive /api/ routing (#3943)
             _is_csp_report_post = parsed.path == "/api/csp-report" and self.command == "POST"
             if not _is_csp_report_post and not check_auth_or_close(self, parsed): return
+            if parsed.path == '/api/external-apps':
+                from api.routes import _check_csrf
+                if not _check_csrf(self):
+                    return j(self, {'error': 'CSRF validation failed'}, status=403)
+            from api.external_apps import handle_external_apps
+            if handle_external_apps(self, parsed): return
             result = route_func(self, parsed)
             if result is False:
                 return j(self, {'error': 'not found'}, status=404)
