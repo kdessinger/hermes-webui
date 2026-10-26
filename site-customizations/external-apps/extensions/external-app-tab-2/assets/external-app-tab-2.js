@@ -195,10 +195,10 @@
   function escClose(ev) { if (ev.key === 'Escape') closeOverlay(); }
 
   // ── config dialog ────────────────────────────────────────────────────────
-  function openConfig() {
+  function openConfig(context) {
     const cfg = loadCfg();
     let dlg = document.getElementById('hwxExtApp2Config');
-    if (dlg) dlg.remove();
+    if (dlg) { if (dlg.closeConfig) dlg.closeConfig(); else dlg.remove(); }
     dlg = document.createElement('div');
     dlg.id = 'hwxExtApp2Config';
     dlg.className = 'hwx-extapp2-config-dlg';
@@ -223,7 +223,18 @@
     const err = dlg.querySelector('.hwx-extapp2-config-err');
     labelIn.value = cfg.label || '';
     urlIn.value = cfg.url || '';
-    const close = () => dlg.remove();
+    let closed = false;
+    const close = () => {
+      if (closed) return;
+      closed = true;
+      dlg.remove();
+      if (context && typeof context.restoreFocus === 'function') context.restoreFocus();
+    };
+    dlg.closeConfig = close;
+    dlg.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); }
+    });
+    labelIn.focus();
     dlg.querySelector('.hwx-extapp2-cancel').addEventListener('click', close);
     dlg.addEventListener('click', (e) => { if (e.target === dlg) close(); });
     dlg.querySelector('.hwx-extapp2-save').addEventListener('click', async () => {
@@ -258,7 +269,7 @@
     if (document.querySelector('.rail')) {
       ensureRailButton();
       const handle = window.hermesExt?.register?.(EXT);
-      handle?.settings?.registerConfigure?.(() => openConfig());
+      handle?.settings?.registerConfigure?.((context) => openConfig(context));
       window.HermesExternalAppTab2Extension = {
         version: '0.1.0',
         getConfig: loadCfg,

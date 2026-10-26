@@ -101,7 +101,7 @@
 .hwx-extapp2-config-dlg {
   position: fixed;
   inset: 0;
-  z-index: 70;
+  z-index: 1150;
   display: flex;
   align-items: center;
   justify-content: center;
