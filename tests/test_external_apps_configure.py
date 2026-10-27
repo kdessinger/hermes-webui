@@ -5,7 +5,7 @@ import pytest
 
 ROOT = Path(__file__).resolve().parents[1]
 
-@pytest.mark.parametrize('slot,prefix', [('external-app-tab','hwx-extapp'), ('external-app-tab-2','hwx-extapp2')])
+@pytest.mark.parametrize('slot,prefix', [('external-app-tab','hwx-extapp'), ('external-app-tab-2','hwx-extapp2'), ('external-app-tab-3','hwx-extapp3')])
 def test_configure_close_settles_and_can_reopen(slot, prefix):
     bundle = ROOT / 'site-customizations/external-apps/extensions' / slot / 'assets' / (slot + '.js')
     script = r'''
@@ -47,7 +47,7 @@ vm.runInThisContext(fs.readFileSync(bundle,'utf8'));
     result = subprocess.run(['node','-e',script,str(ROOT/'static/extension_settings.js'),str(bundle),slot,prefix],capture_output=True,text=True,timeout=20)
     assert result.returncode == 0, result.stdout + result.stderr
 
-@pytest.mark.parametrize('slot,prefix', [('external-app-tab','hwx-extapp'), ('external-app-tab-2','hwx-extapp2')])
+@pytest.mark.parametrize('slot,prefix', [('external-app-tab','hwx-extapp'), ('external-app-tab-2','hwx-extapp2'), ('external-app-tab-3','hwx-extapp3')])
 def test_configure_dialog_is_above_core_dialog_layer(slot, prefix):
     import re
     css = (ROOT / 'site-customizations/external-apps/extensions' / slot / 'assets' / (slot+'.css')).read_text()

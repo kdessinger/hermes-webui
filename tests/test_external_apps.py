@@ -56,6 +56,18 @@ def test_invalid_urls_do_not_write(tmp_path, monkeypatch, url):
     assert not (tmp_path / 'external-apps.json').exists()
 
 
+def test_third_slot_preserves_existing_apps(tmp_path, monkeypatch):
+    mod = api(tmp_path, monkeypatch)
+    before = request(mod)[1]
+    assert before['external-app-tab-3'] == {'url': '', 'label': 'App 3'}
+    update = {'id': 'external-app-tab-3', 'url': 'https://example.org/third', 'label': 'Third app'}
+    assert request(mod, 'POST', update)[0] == 200
+    restored = request(mod)[1]
+    assert restored['external-app-tab-3'] == {'url': update['url'], 'label': update['label']}
+    for slot in ('external-app-tab', 'external-app-tab-2'):
+        assert restored[slot] == before[slot]
+
+
 def test_bad_slot_and_method(tmp_path, monkeypatch):
     mod = api(tmp_path, monkeypatch)
     assert request(mod, 'POST', {'id': '../auth', 'url': '', 'label': 'App'})[0] == 400
