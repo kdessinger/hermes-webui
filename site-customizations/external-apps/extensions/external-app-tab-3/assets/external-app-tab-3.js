@@ -1,0 +1,305 @@
+(() => {
+  'use strict';
+
+  // ── External App Tab 3 extension for Hermes WebUI ──────────────────────────
+  // Pins a compatible self-hosted web app (Grafana, Vaultwarden, a personal
+  // dashboard) as a tab inside the WebUI via an <iframe>. Adds a rail button
+  // that opens a full-area overlay panel framing a user-configured URL.
+  //
+  // IMPORTANT — CSP dependency:
+  //   The WebUI's Content-Security-Policy only allows framing same-origin
+  //   content by default. To frame an EXTERNAL origin, the operator must allow
+  //   it via the core knob (nesquena/hermes-webui PR #5091):
+  //       export HERMES_WEBUI_CSP_FRAME_EXTRA="https://your-app.example.com"
+  //   A same-origin or loopback-reverse-proxied URL works without any core
+  //   change. If the configured URL is blocked by CSP, the browser refuses to
+  //   load the frame; the extension shows a hint explaining the knob.
+  //
+  // Site customization: app configuration is shared through the authenticated
+  // server API. Browser-local settings are deliberately not migrated over it.
+
+  const EXT = 'external-app-tab-3';
+  if (window.__hermesExternalAppTab3Loaded) return;
+  window.__hermesExternalAppTab3Loaded = true;
+
+  const RAIL_BTN_ID = 'hwxExtApp3RailBtn';
+  const OVERLAY_ID = 'hwxExtApp3Overlay';
+  const CONFIG_ENDPOINT = 'api/external-apps';
+  let overlayOpen = false;
+  let serverCfg = null;
+  let configError = '';
+
+  async function fetchCfg(options) {
+    const response = await fetch(CONFIG_ENDPOINT, {
+      credentials: 'same-origin', cache: 'no-store', ...options,
+    });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || 'App settings unavailable');
+    if (!data[EXT]) throw new Error('App configuration missing');
+    serverCfg = data[EXT];
+    configError = '';
+    return serverCfg;
+  }
+
+  function loadCfg() {
+    const cfg = serverCfg || {url: '', label: 'App settings unavailable'};
+    return {...cfg, url: cfg.url ? new URL(cfg.url, window.location.href).href : ''};
+  }
+
+  async function saveCfg(cfg) {
+    // Save built-in paths without an origin so LAN/public devices share them.
+    let url = cfg.url || '';
+    if (url) {
+      const parsed = new URL(url, window.location.href);
+      if (parsed.origin === window.location.origin &&
+          ['/apps/nas-recovery/', '/apps/opencve/'].includes(parsed.pathname) &&
+          !parsed.search && !parsed.hash) url = parsed.pathname;
+    }
+    await fetchCfg({method: 'POST', headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({id: EXT, url, label: cfg.label || 'App'})});
+  }
+
+  function validUrl(value) {
+    if (typeof value !== 'string' || !value || /[\\\x00-\x20\x7f]/.test(value)) return false;
+    if (['/apps/nas-recovery/', '/apps/opencve/'].includes(value)) return true;
+    try {
+      const u = new URL(value);
+      return ['http:', 'https:'].includes(u.protocol) && !u.username && !u.password;
+    } catch (_) { return false; }
+  }
+
+  function escapeHtml(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
+  // ── rail button ──────────────────────────────────────────────────────────
+  function railIcon() {
+    return '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" ' +
+      'stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+      '<rect x="3" y="3" width="18" height="18" rx="2"/><path d="M3 9h18"/>' +
+      '<path d="M15 21V9"/></svg>';
+  }
+
+  function ensureRailButton() {
+    if (document.getElementById(RAIL_BTN_ID)) return document.getElementById(RAIL_BTN_ID);
+    const rail = document.querySelector('.rail');
+    if (!rail) return null;
+    const btn = document.createElement('button');
+    btn.id = RAIL_BTN_ID;
+    btn.type = 'button';
+    btn.className = 'rail-btn nav-tab has-tooltip hwx-extapp3-rail';
+    const cfg = loadCfg();
+    btn.dataset.tooltip = cfg.label || 'App 3';
+    btn.setAttribute('aria-label', cfg.label || 'External app');
+    btn.innerHTML = railIcon();
+    btn.addEventListener('click', (ev) => { ev.preventDefault(); toggleOverlay(); });
+    // Insert just before the rail spacer (so it sits with the content tabs,
+    // above settings), or append if there's no spacer.
+    const spacer = rail.querySelector('.rail-spacer');
+    if (spacer) rail.insertBefore(btn, spacer);
+    else rail.appendChild(btn);
+    return btn;
+  }
+
+  // ── overlay panel with the iframe ────────────────────────────────────────
+  function buildOverlay() {
+    let ov = document.getElementById(OVERLAY_ID);
+    if (ov) return ov;
+    ov = document.createElement('div');
+    ov.id = OVERLAY_ID;
+    ov.className = 'hwx-extapp3-overlay';
+    ov.style.display = 'none';
+    ov.innerHTML =
+      '<div class="hwx-extapp3-bar">' +
+        '<span class="hwx-extapp3-title"></span>' +
+        '<span class="hwx-extapp3-spacer"></span>' +
+        '<button type="button" class="hwx-extapp3-btn hwx-extapp3-config" title="Configure">Configure</button>' +
+        '<button type="button" class="hwx-extapp3-btn hwx-extapp3-open" title="Open in new tab">Open ↗</button>' +
+        '<button type="button" class="hwx-extapp3-btn hwx-extapp3-close" title="Close" aria-label="Close">✕</button>' +
+      '</div>' +
+      '<div class="hwx-extapp3-body"></div>';
+    document.body.appendChild(ov);
+    ov.querySelector('.hwx-extapp3-close').addEventListener('click', () => closeOverlay());
+    ov.querySelector('.hwx-extapp3-config').addEventListener('click', () => openConfig());
+    ov.querySelector('.hwx-extapp3-open').addEventListener('click', () => {
+      const cfg = loadCfg();
+      if (validUrl(cfg.url)) window.open(cfg.url, '_blank', 'noopener');
+    });
+    return ov;
+  }
+
+  function renderOverlayContent() {
+    const ov = buildOverlay();
+    const cfg = loadCfg();
+    ov.querySelector('.hwx-extapp3-title').textContent = cfg.label || 'External app';
+    const body = ov.querySelector('.hwx-extapp3-body');
+    body.innerHTML = '';
+    if (!validUrl(cfg.url)) {
+      const empty = document.createElement('div');
+      empty.className = 'hwx-extapp3-empty';
+      empty.innerHTML =
+        '<p>' + escapeHtml(configError || 'No app configured yet.') + '</p>' +
+        '<p class="hwx-extapp3-muted">Set a URL to embed a compatible self-hosted web app as a tab.</p>' +
+        '<button type="button" class="hwx-extapp3-btn hwx-extapp3-config-cta">Configure…</button>';
+      empty.querySelector('.hwx-extapp3-config-cta').addEventListener('click', () => openConfig());
+      body.appendChild(empty);
+      return;
+    }
+    const frame = document.createElement('iframe');
+    frame.className = 'hwx-extapp3-iframe';
+    frame.src = cfg.url;
+    frame.setAttribute('title', cfg.label || 'External app');
+    // Sandbox the embedded app with an explicit, documented allow-list so it can
+    // function (scripts/forms/popups) while staying constrained (Frank, PR #25:
+    // the previous comment claimed "sandboxed" but never set a sandbox attr).
+    // Tradeoff: a real web app generally needs allow-scripts + allow-same-origin
+    // to work; for a SAME-ORIGIN target that pairing relaxes the origin barrier,
+    // so the README is explicit that an embedded app is trusted browser content
+    // once the operator allow-lists its origin via HERMES_WEBUI_CSP_FRAME_EXTRA.
+    frame.setAttribute('sandbox', 'allow-scripts allow-forms allow-popups allow-popups-to-escape-sandbox allow-same-origin allow-downloads');
+    frame.setAttribute('referrerpolicy', 'no-referrer');
+    // A CSP frame-src block surfaces as a blank frame; show a hint underneath
+    // that the operator may need HERMES_WEBUI_CSP_FRAME_EXTRA.
+    const hint = document.createElement('div');
+    hint.className = 'hwx-extapp3-cspnote';
+    hint.innerHTML = 'If this stays blank, the page may be blocked by the WebUI ' +
+      'Content-Security-Policy. Allow it (operator) with ' +
+      '<code>HERMES_WEBUI_CSP_FRAME_EXTRA="' + escapeHtml(originOf(cfg.url)) + '"</code>.';
+    body.appendChild(frame);
+    body.appendChild(hint);
+  }
+
+  function originOf(u) { try { return new URL(u).origin; } catch (_) { return u; } }
+
+  function toggleOverlay() { overlayOpen ? closeOverlay() : openOverlay(); }
+
+  function openOverlay() {
+    renderOverlayContent();
+    const ov = document.getElementById(OVERLAY_ID);
+    ov.style.display = 'flex';
+    overlayOpen = true;
+    const btn = document.getElementById(RAIL_BTN_ID);
+    if (btn) btn.classList.add('active');
+    document.addEventListener('keydown', escClose, true);
+  }
+  function closeOverlay() {
+    const ov = document.getElementById(OVERLAY_ID);
+    if (ov) ov.style.display = 'none';
+    overlayOpen = false;
+    const btn = document.getElementById(RAIL_BTN_ID);
+    if (btn) btn.classList.remove('active');
+    document.removeEventListener('keydown', escClose, true);
+  }
+  function escClose(ev) { if (ev.key === 'Escape') closeOverlay(); }
+
+  // ── config dialog ────────────────────────────────────────────────────────
+  function openConfig(context) {
+    const cfg = loadCfg();
+    let dlg = document.getElementById('hwxExtApp3Config');
+    if (dlg) { if (dlg.closeConfig) dlg.closeConfig(); else dlg.remove(); }
+    dlg = document.createElement('div');
+    dlg.id = 'hwxExtApp3Config';
+    dlg.className = 'hwx-extapp3-config-dlg';
+    dlg.innerHTML =
+      '<div class="hwx-extapp3-config-card" role="dialog" aria-label="Configure external app">' +
+        '<div class="hwx-extapp3-config-title">External app tab 2</div>' +
+        '<label class="hwx-extapp3-field"><span>Label</span>' +
+          '<input type="text" class="hwx-extapp3-input hwx-extapp3-label-in" maxlength="24" placeholder="App"></label>' +
+        '<label class="hwx-extapp3-field"><span>URL (http/https)</span>' +
+          '<input type="text" class="hwx-extapp3-input hwx-extapp3-url-in" placeholder="https://app.example.com"></label>' +
+        '<div class="hwx-extapp3-config-note">To frame an external origin, the operator must allow it via ' +
+          '<code>HERMES_WEBUI_CSP_FRAME_EXTRA</code>. Saved on the server and shared across your devices. Built-in app paths work on LAN and public URLs.</div>' +
+        '<div class="hwx-extapp3-config-err" hidden></div>' +
+        '<div class="hwx-extapp3-config-actions">' +
+          '<button type="button" class="hwx-extapp3-btn hwx-extapp3-cancel">Cancel</button>' +
+          '<button type="button" class="hwx-extapp3-btn hwx-extapp3-save">Save</button>' +
+        '</div>' +
+      '</div>';
+    document.body.appendChild(dlg);
+    const labelIn = dlg.querySelector('.hwx-extapp3-label-in');
+    const urlIn = dlg.querySelector('.hwx-extapp3-url-in');
+    const err = dlg.querySelector('.hwx-extapp3-config-err');
+    labelIn.value = cfg.label || '';
+    urlIn.value = cfg.url || '';
+    let closed = false;
+    const close = () => {
+      if (closed) return;
+      closed = true;
+      dlg.remove();
+      if (context && typeof context.restoreFocus === 'function') context.restoreFocus();
+    };
+    dlg.closeConfig = close;
+    dlg.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') { event.preventDefault(); event.stopPropagation(); close(); }
+    });
+    labelIn.focus();
+    dlg.querySelector('.hwx-extapp3-cancel').addEventListener('click', close);
+    dlg.addEventListener('click', (e) => { if (e.target === dlg) close(); });
+    dlg.querySelector('.hwx-extapp3-save').addEventListener('click', async () => {
+      const url = urlIn.value.trim();
+      const label = (labelIn.value.trim() || 'App 3').slice(0, 24);
+      if (url && !validUrl(url)) {
+        err.hidden = false;
+        err.textContent = 'Enter a valid http(s) URL (or leave blank to clear).';
+        return;
+      }
+      const save = dlg.querySelector('[class$="-save"]');
+      save.disabled = true;
+      err.hidden = true;
+      try {
+        await saveCfg({ url, label });
+      } catch (error) {
+        err.hidden = false;
+        err.textContent = error.message || 'Could not save app settings. Retry.';
+        save.disabled = false;
+        return;
+      }
+      // refresh rail tooltip + overlay
+      const btn = document.getElementById(RAIL_BTN_ID);
+      if (btn) { btn.dataset.tooltip = label; btn.setAttribute('aria-label', label); }
+      if (overlayOpen) renderOverlayContent();
+      close();
+    });
+  }
+
+  function install(attempt) {
+    attempt = attempt || 0;
+    if (document.querySelector('.rail')) {
+      ensureRailButton();
+      const handle = window.hermesExt?.register?.(EXT);
+      handle?.settings?.registerConfigure?.((context) => openConfig(context));
+      window.HermesExternalAppTab3Extension = {
+        version: '0.1.0',
+        getConfig: loadCfg,
+        async setConfig(url, label) {
+          if (url && !validUrl(url)) return false;
+          await saveCfg({ url: url || '', label: (label || 'App 3').slice(0, 24) });
+          const btn = document.getElementById(RAIL_BTN_ID);
+          if (btn) { const c = loadCfg(); btn.dataset.tooltip = c.label; btn.setAttribute('aria-label', c.label); }
+          if (overlayOpen) renderOverlayContent();
+          return true;
+        },
+        open: openOverlay,
+        close: closeOverlay,
+      };
+      return true;
+    }
+    if (attempt < 80) { setTimeout(() => install(attempt + 1), 150); return false; }
+    console.warn('[' + EXT + '] rail not found; not installed');
+    return false;
+  }
+
+  async function start() {
+    try { await fetchCfg(); }
+    catch (error) { configError = error.message || 'Could not load app settings. Retry Configure.'; }
+    install();
+  }
+
+  if (document.readyState === 'loading') {
+    document.addEventListener('DOMContentLoaded', () => start(), { once: true });
+  } else {
+    start();
+  }
+})();

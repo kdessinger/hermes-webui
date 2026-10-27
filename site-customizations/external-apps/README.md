@@ -1,14 +1,14 @@
 # Shared External App slots (site customization)
 
 This is a narrowly scoped server-persistence customization for `external-app-tab`
-and `external-app-tab-2`, not a change to the generic browser-local extension
+`external-app-tab-2`, and `external-app-tab-3`, not a change to the generic browser-local extension
 settings contract.
 
 - Authority: `STATE_DIR/external-apps.json`, installation-wide for this WebUI's
   authenticated owner. It is not scoped to a chat or browser origin. This is not
   a multi-user per-account settings implementation.
 - Defaults: App 1 = NAS Recovery (`/apps/nas-recovery/`), App 2 = OpenCVE
-  (`/apps/opencve/`). Origin-free built-in paths work on LAN and public hosts.
+  (`/apps/opencve/`); App 3 is blank with label `App 3`. Origin-free built-in paths work on LAN and public hosts.
 - `GET /api/external-apps` reads both slots; `POST` updates exactly one allowlisted
   slot with `{id,url,label}`. Both run after authentication; writes use the core
   CSRF/origin gate, bounded JSON, validation, a process lock and atomic mode-0600

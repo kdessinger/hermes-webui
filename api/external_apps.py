@@ -1,6 +1,6 @@
 """Site-local shared app slots. Invoked only after the WebUI auth/CSRF gate.
 
-Not generic extension storage: only two app slots, no credentials, no arbitrary
+Not generic extension storage: only three app slots, no credentials, no arbitrary
 filesystem paths, no server fetching of configured URLs. State belongs to this
 WebUI installation (which currently has one authenticated owner), not a chat.
 """
@@ -15,6 +15,7 @@ from api.config import STATE_DIR
 DEFAULTS = {
     'external-app-tab': {'url': '/apps/nas-recovery/', 'label': 'NAS Recovery'},
     'external-app-tab-2': {'url': '/apps/opencve/', 'label': 'OpenCVE'},
+    'external-app-tab-3': {'url': '', 'label': 'App 3'},
 }
 _LOCK = threading.RLock()
 
