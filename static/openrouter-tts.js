@@ -42,7 +42,9 @@
     try{
       const response=await fetch(new URL('api/tts',document.baseURI||location.href),{
         method:'POST',headers:{'Content-Type':'application/json'},signal:controller.signal,
-        body:JSON.stringify({engine:'openrouter',model:selection.model,voice:selection.voice,text:'Hello Kenn. This is a preview of my voice. How do I sound?'})
+        // Pin the active profile (#7529): a profile switch while the request is
+        // in flight must not send this preview under the new profile.
+        body:JSON.stringify({engine:'openrouter',model:selection.model,voice:selection.voice,text:'Hello Kenn. This is a preview of my voice. How do I sound?',profile:(typeof S!=='undefined'&&S&&S.activeProfile)||'default'})
       });
       if(!response.ok){
         const error=await response.json().catch(()=>({}));

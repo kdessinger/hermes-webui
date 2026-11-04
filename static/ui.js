@@ -12800,7 +12800,7 @@ function _playOpenRouterTts(text, btn){
   const selection=window._openRouterTtsSelection();
   return fetch(new URL('api/tts', document.baseURI || location.href).href,{
     method:'POST',headers:{'Content-Type':'application/json'},
-    body:JSON.stringify({text:text,model:selection.model,voice:selection.voice,engine:'openrouter'})
+    body:JSON.stringify({text:text,model:selection.model,voice:selection.voice,engine:'openrouter',profile:(typeof S!=='undefined'&&S&&S.activeProfile)||'default'})
   }).then(function(r){
     if(!r.ok) return r.json().catch(function(){return {};}).then(function(j){
       throw new Error(j.error||('HTTP '+r.status));
@@ -12829,7 +12829,10 @@ function _playCartesiaTts(text, btn){
     body:JSON.stringify({
       text:text,
       voice:localStorage.getItem('hermes-tts-voice')||'',
-      engine:'cartesia'
+      engine:'cartesia',
+      // Pin the active profile (#7529) so a profile switch while this request
+      // is queued cannot send it under the new profile's credentials.
+      profile:(typeof S!=='undefined'&&S&&S.activeProfile)||'default'
     })
   })
   .then(function(r){
