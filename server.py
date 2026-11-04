@@ -10,6 +10,33 @@ import threading
 import time
 import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+
+# Managed launchers can execute this entry point with runpy without adding the
+# script's directory to sys.path. Keep local api.* imports resolvable in that
+# mode as well as when Python launches server.py directly.
+_REPO_ROOT = os.path.dirname(os.path.abspath(__file__))
+if _REPO_ROOT not in sys.path:
+    sys.path.insert(0, _REPO_ROOT)
+
+# Hermes-managed interpreters may run this file via runpy while bypassing the
+# venv activation that normally supplies WebUI dependencies. Preserve the
+# project's dependency path without requiring a second, globally installed set.
+_VENV_LIB = os.path.join(_REPO_ROOT, ".venv", "lib")
+_VENV_SITE_PACKAGES = os.path.join(
+    _VENV_LIB,
+    f"python{sys.version_info.major}.{sys.version_info.minor}",
+    "site-packages",
+)
+if not os.path.isdir(_VENV_SITE_PACKAGES) and os.path.isdir(_VENV_LIB):
+    _venv_python_dirs = sorted(
+        name for name in os.listdir(_VENV_LIB) if name.startswith("python")
+    )
+    if _venv_python_dirs:
+        _VENV_SITE_PACKAGES = os.path.join(
+            _VENV_LIB, _venv_python_dirs[-1], "site-packages"
+        )
+if os.path.isdir(_VENV_SITE_PACKAGES) and _VENV_SITE_PACKAGES not in sys.path:
+    sys.path.insert(0, _VENV_SITE_PACKAGES)
 def _ignore_sigpipe() -> None:
     """Keep broken client writes from terminating the server process."""
     if (sigpipe := getattr(signal, "SIGPIPE", None)) is not None:
@@ -379,6 +406,8 @@ class Handler(BaseHTTPRequestHandler):
             if not check_auth(self, parsed): return
             from api.external_apps import handle_external_apps
             if handle_external_apps(self, parsed): return
+            from api.opencve_app import handle_opencve
+            if handle_opencve(self, parsed): return
             result = handle_get(self, parsed)
             if result is False:
                 return j(self, {'error': 'not found'}, status=404)
@@ -413,6 +442,8 @@ class Handler(BaseHTTPRequestHandler):
                     return j(self, {'error': 'CSRF validation failed'}, status=403)
             from api.external_apps import handle_external_apps
             if handle_external_apps(self, parsed): return
+            from api.opencve_app import handle_opencve
+            if handle_opencve(self, parsed): return
             result = route_func(self, parsed)
             if result is False:
                 return j(self, {'error': 'not found'}, status=404)

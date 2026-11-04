@@ -6777,8 +6777,15 @@ WEBHOOK_PROJECT_NAME = 'Webhooks'
 _WEBHOOK_PROJECT_LOCK = threading.Lock()
 
 
-def ensure_webhook_project(profile: str | None = None) -> str:
-    """Return the project_id of the system "Webhooks" project for `profile` (default: active)."""
+def ensure_webhook_project(profile: str | None = None, create: bool = True) -> str | None:
+    """Return the Webhooks project for ``profile`` without minting a visible
+    system project unless project organization is already in use for that profile.
+
+    Existing webhook projects remain addressable so historical webhook sessions
+    retain their bucket. Sidebar projections pass ``create=False`` for profiles
+    with no user-created projects; this prevents dormant or cross-profile scans
+    from littering the shared project bar with empty, identical Webhooks chips.
+    """
     from api.profiles import get_active_profile_name, _is_root_profile
 
     # Owner of the scanned state.db wins over the selected profile (see ensure_cron_project).
@@ -6798,6 +6805,8 @@ def ensure_webhook_project(profile: str | None = None) -> str:
                 p['profile'] = active
                 save_projects(projects)
                 return p['project_id']
+        if not create:
+            return None
         project_id = uuid.uuid4().hex[:12]
         projects.append({
             'project_id': project_id,
@@ -7804,7 +7813,10 @@ def _load_cli_sessions_uncached(
     _webhook_pid_cache: list[str | None] = [None]
     def _webhook_pid():
         if _webhook_pid_cache[0] is None:
-            _webhook_pid_cache[0] = ensure_webhook_project(profile=_cli_profile)
+            _webhook_pid_cache[0] = ensure_webhook_project(
+                profile=_cli_profile,
+                create=_profile_has_user_projects(profile=_cli_profile),
+            )
         return _webhook_pid_cache[0]
 
     def _state_row_project_id(sid: str, source: str | None) -> str | None:

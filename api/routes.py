@@ -13410,7 +13410,8 @@ def _handle_session_get(handler, parsed) -> bool:
             for row in _all_msgs
         )
         if (
-            not raw.get("read_only")
+            load_messages
+            and not raw.get("read_only")
             and not _truncated
             and (not raw.get("is_cli_session") or imported_turn_marker)
         ):
@@ -13554,6 +13555,9 @@ def _handle_session_get(handler, parsed) -> bool:
 
 def handle_get(handler, parsed) -> bool:
     """Handle all GET routes. Returns True if handled, False for 404."""
+    from api.nas_recovery import handle_nas_recovery
+    if handle_nas_recovery(handler, parsed):
+        return True
     proxy_result = _handle_extension_sidecar_proxy(handler, parsed, "GET")
     if proxy_result is not False:
         return proxy_result
