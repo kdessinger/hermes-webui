@@ -9734,10 +9734,16 @@ WEBHOOK_PROJECT_NAME = 'Webhooks'
 _WEBHOOK_PROJECT_LOCK = threading.Lock()
 
 
-def ensure_webhook_project(profile: str | None = None) -> str:
-    """Return the project_id of the system "Webhooks" project for `profile` (default: active).
+def ensure_webhook_project(profile: str | None = None, create: bool = True) -> str | None:
+    """Return the Webhooks project for ``profile`` without minting a visible
+    system project unless project organization is already in use for that profile.
 
-    Like ``ensure_cron_project``, the load → modify → save pair runs under
+    Existing webhook projects remain addressable so historical webhook sessions
+    retain their bucket. Sidebar projections pass ``create=False`` for profiles
+    with no user-created projects; this prevents dormant or cross-profile scans
+    from littering the shared project bar with empty, identical Webhooks chips.
+
+    Mirrors ``ensure_cron_project``: the load → modify → save pair runs under
     ``PROJECTS_CATALOG_LOCK`` so a background scan cannot save a stale catalog
     over a binding the user just saved (Greptile P1 2026-10-10T13:00:52Z).
     """
@@ -9760,6 +9766,8 @@ def ensure_webhook_project(profile: str | None = None) -> str:
                 p['profile'] = active
                 save_projects(projects)
                 return p['project_id']
+        if not create:
+            return None
         project_id = uuid.uuid4().hex[:12]
         projects.append({
             'project_id': project_id,
@@ -11035,11 +11043,20 @@ def _load_cli_sessions_uncached(
                 _cli_workspace_cache[0] = str(get_last_workspace())
         return _cli_workspace_cache[0]
 
-    _webhook_pid_cache: list[str | None] = [None]
+    # Two-element cache, matching _cron_pid: [False, None] means "not resolved
+    # yet". A bare [None] sentinel would re-resolve on every call, because
+    # ensure_webhook_project(..., create=False) legitimately returns None when
+    # the profile has no user-created projects — the same I/O blowup #4842
+    # fixed for the cron path.
+    _webhook_pid_cache: list = [False, None]
     def _webhook_pid():
-        if _webhook_pid_cache[0] is None:
-            _webhook_pid_cache[0] = ensure_webhook_project(profile=_cli_profile)
-        return _webhook_pid_cache[0]
+        if not _webhook_pid_cache[0]:
+            _webhook_pid_cache[0] = True
+            _webhook_pid_cache[1] = ensure_webhook_project(
+                profile=_cli_profile,
+                create=_profile_has_user_projects(profile=_cli_profile),
+            )
+        return _webhook_pid_cache[1]
 
     # The live project catalog for THIS SCAN'S profile, read lazily and at most
     # once per scan (same [resolved, value] cell pattern as _cron_pid above, for

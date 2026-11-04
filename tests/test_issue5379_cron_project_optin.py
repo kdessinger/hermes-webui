@@ -311,10 +311,9 @@ def test_renamed_root_alias_cron_project_resolves_when_zero_user_projects(tmp_pa
     assert cron_rows[0]["project_id"] == "root-alias-cron"
 
 
-def test_webhook_project_still_auto_created_when_zero_user_projects(tmp_path):
-    """Adjacent-condition row: the ungated webhook path must still
-    auto-create its dedicated project even in the same zero-user-project
-    scan where the cron path is now suppressed."""
+def test_webhook_sidebar_scan_zero_user_projects_skips_project_creation(tmp_path):
+    """Webhook history must not mint a visible system project for a profile
+    that has never opted into project organization."""
     import api.models as models
 
     projects_file = tmp_path / "projects.json"
@@ -351,10 +350,8 @@ def test_webhook_project_still_auto_created_when_zero_user_projects(tmp_path):
 
     webhook_rows = [r for r in rows if r["source_tag"] == "webhook"]
     assert len(webhook_rows) == 1
-    assert webhook_rows[0]["project_id"] is not None
-
-    saved = json.loads(projects_file.read_text())
-    assert any(p["name"] == "Webhooks" for p in saved)
+    assert webhook_rows[0]["project_id"] is None
+    assert not projects_file.exists(), "No unused Webhooks project should be persisted"
 
 
 def test_profile_has_user_projects_ignores_system_named_projects(tmp_path):
