@@ -11,9 +11,8 @@ import time
 import traceback
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 
-# Hermes-managed interpreters may run this file via runpy, bypassing the venv
-# activation that supplies WebUI dependencies. Importing this restores the
-# venv's site-packages and keeps the fix out of upstream's server.py budget.
+# runpy launches skip both the script dir and venv activation; restore them before local imports.
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import webui_path_bootstrap  # noqa: F401,E402
 
 def _ignore_sigpipe() -> None:
